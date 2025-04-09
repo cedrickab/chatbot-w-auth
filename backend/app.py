@@ -1,64 +1,75 @@
-from flask import Flask, request, jsonify, render_template
-from flask_sqlalchemy import SQLAlchemy
-from flask_bcrypt import Bcrypt
-from flask_mail import Mail, Message
+from flask import Flask, redirect, url_for, session, request, render_template
+from msal import ConfidentialClientApplication
 import os
+from dotenv import load_dotenv
 
-app = Flask(__name__)
+load_dotenv()
 
-# Configuration
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'your-email@gmail.com'  # replace with your email
-app.config['MAIL_PASSWORD'] = 'your-email-password'  # replace with your email password
+CLIENT_ID = os.getenv("CLIENT_ID")
+CLIENT_SECRET = os.getenv("CLIENT_SECRET")
+TENANT_ID = os.getenv("TENANT_ID", "common")
+AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
+REDIRECT_PATH = "/getAToken"
+SCOPE = ["User.Read"]
 
-# Extensions
-db = SQLAlchemy(app)
-bcrypt = Bcrypt(app)
-mail = Mail(app)
+app = Flask(__name__, template_folder="../frontend/templates", static_folder="../frontend/static")
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(24))
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["PERMANENT_SESSION_LIFETIME"] = 3600
 
-# User model
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password = db.Column(db.String(60), nullable=False)
+msal_app = ConfidentialClientApplication(
+    client_id=CLIENT_ID,
+    client_credential=CLIENT_SECRET,
+    authority=AUTHORITY
+)
 
-# Create the database
-with app.app_context():
-    db.create_all()
+@app.route("/")
+def index():
+    if not session.get("user"):
+        return render_template("index.html")  # 👈 FIX: render login page
+    return f"Welcome {session['user'].get('preferred_username', 'User')}!"
 
-@app.route('/')
-def home():
-    return render_template('index.html')
+@app.route("/login")
+def login():
+    session["state"] = os.urandom(16).hex()
+    auth_url = msal_app.get_authorization_request_url(
+        scopes=SCOPE,
+        redirect_uri=request.base_url.replace("login", "getAToken"),
+        state=session["state"]
+    )
+    return redirect(auth_url)
 
-@app.route('/register', methods=['POST'])
-def register():
-    email = request.form['email']
-    password = request.form['password']
+@app.route("/getAToken")
+def authorized():
+    if request.args.get("state") != session.get("state"):
+        return "State verification failed", 400
+    if "error" in request.args:
+        return f"Authentication failed: {request.args['error_description']}", 401
 
-    if not email.endswith('@gmail.com'):
-        return jsonify({'error': 'Registration requires a @gmail.com email address.'}), 400
+    code = request.args.get("code")
+    if not code:
+        return "No auth code provided", 400
 
-    hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+    result = msal_app.acquire_token_by_authorization_code(
+        code=code,
+        scopes=SCOPE,
+        redirect_uri="http://localhost:5000/getAToken"  #request.base_url
+    )
 
-    user = User(email=email, password=hashed_password)
-    db.session.add(user)
-    db.session.commit()
+    if "error" in result:
+        return f"Token acquisition failed: {result.get('error_description')}", 401
 
-    try:
-        msg = Message('Registration Confirmation',
-                      sender='your-email@gmail.com',
-                      recipients=[email])
-        msg.body = 'Thank you for registering with our service!'
-        mail.send(msg)
+    session["user"] = result.get("id_token_claims")
+    return redirect(url_for("index"))
 
-        return jsonify({'message': 'Registration successful! A confirmation email has been sent.'})
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(
+        f"{AUTHORITY}/oauth2/v2.0/logout?"
+        f"post_logout_redirect_uri={url_for('index', _external=True)}"
+    )
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     app.run(debug=True)
