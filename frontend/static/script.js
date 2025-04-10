@@ -18,53 +18,63 @@ function scrollToBottom() {
 document.getElementById('user-input').addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        sendMessage();
+        processInput();
     }
 });
 
 // Add event listener for the send button
 document.getElementById('send-btn').addEventListener('click', () => {
-    sendMessage();
+    processInput();
 });
 
-async function sendMessage() {
+async function processInput() {
     const input = document.getElementById('user-input');
-    const message = input.value.trim();
-    
-    if (!message) return;
-    
+    const query = input.value.trim();
+
+    if (!query) return;
+
     // Clear input and show typing indicator
     input.value = '';
     input.focus();
     showTypingIndicator();
-    
+
     try {
-        // Add message to UI immediately
-        addMessageToUI('user', message);
+        // Add user query to UI immediately
+        addMessageToUI('user', query);
         scrollToBottom();
-        
-        // Send to backend and get response
-        const response = await fetch('/send_message', {
+
+        // Send query to backend and get response
+        const response = await fetch('/process_input', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ message })
+            body: JSON.stringify({ query })
         });
-        
+
         if (!response.ok) throw new Error('Network response was not ok');
-        
+
         const data = await response.json();
         hideTypingIndicator();
-        
-        // Add assistant response to UI
-        addMessageToUI('assistant', data.response);
+
+        if (data.error) {
+            addMessageToUI('assistant', `Error: ${data.error}`);
+        } else {
+            // Add assistant response to UI
+            addMessageToUI('assistant', data.response);
+
+            // Display relevant rows if available
+            if (data.rows && data.rows.length > 0) {
+                const rowsMessage = formatRowsForDisplay(data.rows);
+                addMessageToUI('assistant', rowsMessage);
+            }
+        }
+
         scrollToBottom();
-        
     } catch (error) {
         console.error('Error:', error);
         hideTypingIndicator();
-        showError('Failed to send message. Please try again.');
+        showError('Failed to process input. Please try again.');
     }
 }
 
@@ -72,12 +82,12 @@ function addMessageToUI(sender, message) {
     const chatWindow = document.getElementById('chat-window');
     const messageDiv = document.createElement('div');
     messageDiv.className = `message ${sender}`;
-    
-    const time = new Date().toLocaleTimeString('en-US', { 
-        hour: '2-digit', 
+
+    const time = new Date().toLocaleTimeString('en-US', {
+        hour: '2-digit',
         minute: '2-digit'
     });
-    
+
     messageDiv.innerHTML = `
         ${sender === 'assistant' ? `
             <div class="avatar">
@@ -91,8 +101,14 @@ function addMessageToUI(sender, message) {
             </div>
         </div>
     `;
-    
+
     chatWindow.appendChild(messageDiv);
+}
+
+function formatRowsForDisplay(rows) {
+    return rows.map((row, index) => {
+        return `Row ${index + 1}: ${JSON.stringify(row)}`;
+    }).join('<br>');
 }
 
 function showError(message) {
@@ -100,7 +116,7 @@ function showError(message) {
     errorDiv.className = 'error-message';
     errorDiv.textContent = message;
     document.body.appendChild(errorDiv);
-    
+
     setTimeout(() => {
         errorDiv.remove();
     }, 3000);
@@ -208,14 +224,13 @@ if (clearBtn) {
 
 // Initialize the page
 document.addEventListener("DOMContentLoaded", () => {
-    // Handle any initial setup
     scrollToBottom();
-    
+
     // If there's a welcome message but no chat history, show it
     const chatWindow = document.getElementById('chat-window');
     const messages = chatWindow.querySelectorAll('.message');
     const welcomeMessage = chatWindow.querySelector('.welcome-message');
-    
+
     if (messages.length > 0 && welcomeMessage) {
         welcomeMessage.style.display = 'none';
     }
