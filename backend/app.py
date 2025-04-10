@@ -21,7 +21,7 @@ CLIENT_ID = os.getenv("CLIENT_ID")
 CLIENT_SECRET = os.getenv("CLIENT_SECRET")
 TENANT_ID = os.getenv("TENANT_ID", "common")
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
-REDIRECT_PATH = "/getAToken"
+REDIRECT_PATH = "https://127.0.0.1:5000/getAToken" #/getAToken if in production"
 SCOPE = ["User.Read"]
 
 # Flask app configuration
@@ -109,6 +109,11 @@ def authorized():
             return f"Token acquisition failed: {result.get('error_description')}", 401
 
         session["user"] = result.get("id_token_claims")
+        
+        # Generate a new session ID for chat history
+        session["session_id"] = str(uuid.uuid4())
+        logging.info(f"New session ID generated: {session['session_id']}")
+        
         return redirect(url_for("chatbot"))
     except Exception as e:
         logging.error(f"Error during authorization: {e}")
@@ -125,13 +130,19 @@ def logout():
 @app.route("/chatbot")
 @login_required
 def chatbot():
-    session_id = session.get("session_id")
-    if not session_id:
-        session["session_id"] = str(uuid.uuid4())  # Generate a unique session ID
+    # Ensure we have a session ID
+    if not session.get("session_id"):
+        session["session_id"] = str(uuid.uuid4())
         logging.info(f"New session ID generated: {session['session_id']}")
 
+    # Get chat history for this session
     chat_history = get_chat_history(session["session_id"])
-    user_name = session.get("user", {}).get("preferred_username", "User")
+    user_name = session.get("user", {}).get("name", "User")
+    
+    # If no preferred_username is available, try name or fallback to "User"
+    if not user_name:
+        user_name = session.get("user", {}).get("preferred_username", "User")
+    
     return render_template("chatbot.html", user_name=user_name, chat_history=chat_history)
 
 def save_message(session_id, message, sender):
@@ -139,11 +150,12 @@ def save_message(session_id, message, sender):
         new_message = ChatHistory(session_id=session_id, message=message, sender=sender)
         db.session.add(new_message)
         db.session.commit()
-        logging.info(f"Message saved: {message} (Sender: {sender})")
+        logging.info(f"Message saved: {message[:30]}... (Sender: {sender})")
+        return True
     except Exception as e:
         db.session.rollback()
         logging.error(f"Failed to save message: {e}")
-        raise
+        return False
 
 def get_chat_history(session_id):
     try:
@@ -164,14 +176,22 @@ def send_message():
         user_message = data["message"]
         session_id = session.get("session_id")
         
+        if not session_id:
+            session["session_id"] = str(uuid.uuid4())
+            session_id = session["session_id"]
+            logging.info(f"Generated new session ID: {session_id}")
+            
         # Save user message
-        save_message(session_id, user_message, "user")
+        if not save_message(session_id, user_message, "user"):
+            return jsonify({"error": "Failed to save message"}), 500
         
-        # Simulate AI assistant response
-        assistant_response = f"You said: {user_message}"
+        # Process the message and generate a response
+        # This is where you would integrate with an AI service
+        assistant_response = f"I received your message: '{user_message}'. This is a placeholder response."
         
         # Save assistant response
-        save_message(session_id, assistant_response, "assistant")
+        if not save_message(session_id, assistant_response, "assistant"):
+            return jsonify({"error": "Failed to save assistant response"}), 500
         
         return jsonify({
             "status": "success",
@@ -181,9 +201,30 @@ def send_message():
         logging.error(f"Error in send_message: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
+@app.route("/clear_chat", methods=["POST"])
+@login_required
+def clear_chat():
+    try:
+        session_id = session.get("session_id")
+        if not session_id:
+            return jsonify({"error": "No active session"}), 400
+            
+        # Delete all messages for this session
+        ChatHistory.query.filter_by(session_id=session_id).delete()
+        db.session.commit()
+        
+        # Generate a new session ID
+        session["session_id"] = str(uuid.uuid4())
+        logging.info(f"Chat cleared. New session ID: {session['session_id']}")
+        
+        return jsonify({"status": "success", "message": "Chat history cleared"})
+    except Exception as e:
+        db.session.rollback()
+        logging.error(f"Error clearing chat: {e}")
+        return jsonify({"error": "Failed to clear chat history"}), 500
+
 if __name__ == "__main__":
     try:
-        app.run(debug=True)
+        app.run(debug=True, ssl_context='adhoc')  # Using adhoc SSL for development
     except Exception as e:
         logging.critical(f"Application failed to start: {e}")
-

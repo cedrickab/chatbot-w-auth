@@ -70,17 +70,6 @@
             </div>
         </div>
 
-        <div id="conversations-sidebar" class="sidebar">
-            <div class="sidebar-header">
-                <h2>Conversations</h2>
-                <button class="close-sidebar">&times;</button>
-            </div>
-            <div class="conversations-list">
-                <!-- Conversations will be populated here -->
-            </div>
-        </div>
-
-        <!-- Update the chat window section -->
         <div id="chat-window">
             <!-- Welcome message -->
             <div class="welcome-message">
@@ -89,7 +78,7 @@
             </div>
             
             {% for message in chat_history %}
-                <div class="message {{ 'user' if message.sender == 'user' else 'assistant' }}" data-timestamp="{{ message.timestamp }}">
+                <div class="message {{ message.sender }}">
                     {% if message.sender == 'assistant' %}
                         <div class="avatar">
                             <img src="{{ url_for('static', filename='assistant-avatar.jpg') }}" alt="Assistant">
@@ -103,25 +92,30 @@
                     </div>
                 </div>
             {% endfor %}
+            
+            <!-- Typing indicator -->
+            <div id="typing-indicator" style="display: none;" class="message assistant">
+                <div class="avatar">
+                    <img src="{{ url_for('static', filename='assistant-avatar.jpg') }}" alt="Assistant">
+                </div>
+                <div class="message-content">
+                    <div class="message-bubble">
+                        <div class="typing-dots">
+                            <span class="typing-dot"></span>
+                            <span class="typing-dot"></span>
+                            <span class="typing-dot"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="input-container">
             <input type="text" id="user-input" placeholder="Type your message...">
-            <button id="send-btn">Send</button>
+            <button id="send-btn" class="send-button">
+                <i class="fas fa-paper-plane"></i>
+            </button>
         </div>
-    </div>
-    
-    <!-- Add this spinner to chatbot.html -->
-    <div id="loading-spinner" style="display: none;">
-        <i class="fas fa-spinner fa-spin"></i>
-    </div>
-
-    <!-- Add this to chatbot.html -->
-    <div id="typing-indicator" style="display: none;">
-        <div class="avatar">
-            <img src="/static/assistant-avatar.jpg" alt="Assistant Avatar">
-        </div>
-        <div class="message-bubble">Typing...</div>
     </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>

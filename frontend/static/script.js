@@ -1,12 +1,12 @@
-// Add these functions at the beginning of script.js
+// Utility functions
 function showTypingIndicator() {
-    const indicator = document.querySelector('.typing-indicator');
-    indicator.classList.add('visible');
+    const indicator = document.getElementById('typing-indicator');
+    indicator.style.display = 'block';
 }
 
 function hideTypingIndicator() {
-    const indicator = document.querySelector('.typing-indicator');
-    indicator.classList.remove('visible');
+    const indicator = document.getElementById('typing-indicator');
+    indicator.style.display = 'none';
 }
 
 function scrollToBottom() {
@@ -14,12 +14,17 @@ function scrollToBottom() {
     chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-// Handle input submission
+// Handle input submission with Enter key
 document.getElementById('user-input').addEventListener('keypress', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         sendMessage();
     }
+});
+
+// Add event listener for the send button
+document.getElementById('send-btn').addEventListener('click', () => {
+    sendMessage();
 });
 
 async function sendMessage() {
@@ -59,7 +64,6 @@ async function sendMessage() {
     } catch (error) {
         console.error('Error:', error);
         hideTypingIndicator();
-        // Show error message to user
         showError('Failed to send message. Please try again.');
     }
 }
@@ -102,70 +106,24 @@ function showError(message) {
     }, 3000);
 }
 
+// Speech recognition functionality
 const micBtn = document.getElementById("mic-btn");
-const inputField = document.getElementById("input-field");
+if (micBtn) {
+    micBtn.addEventListener("click", () => {
+        if ('SpeechRecognition' in window || 'webkitSpeechRecognition' in window) {
+            const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+            recognition.lang = document.getElementById("speech-language")?.value || 'en-US';
+            recognition.start();
 
-micBtn.addEventListener("click", () => {
-    const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
-    recognition.lang = 'en-US';  // You can set this dynamically based on the selected language
-    recognition.start();
-
-    recognition.onresult = function(event) {
-        const speechToText = event.results[0][0].transcript;
-        inputField.value = speechToText;  // Put the speech result into the input field
-    };
-});
-
-const loadingSpinner = document.getElementById("loading-spinner");
-
-document.getElementById("submit-btn").addEventListener("click", function() {
-    loadingSpinner.style.display = "block"; // Show spinner
-    const userMessage = document.getElementById("input-field").value;
-    if (userMessage.trim() === "") return;
-
-    // Display user's message
-    const chatWindow = document.getElementById("chat-window");
-    const userMessageDiv = document.createElement("div");
-    userMessageDiv.classList.add("message", "user");
-    userMessageDiv.innerHTML = `
-        <div class="message-bubble">${userMessage}</div>
-        <div class="message-info">
-            <div class="timestamp">Just now</div>
-        </div>
-    `;
-    chatWindow.appendChild(userMessageDiv);
-
-    // Clear input field
-    document.getElementById("input-field").value = "";
-
-    // Simulate assistant response
-    setTimeout(() => {
-        const assistantMessageDiv = document.createElement("div");
-        assistantMessageDiv.classList.add("message", "assistant");
-        assistantMessageDiv.innerHTML = `
-            <div class="avatar">
-                <img src="/static/assistant-avatar.jpg" alt="Assistant Avatar">
-            </div>
-            <div class="message-bubble">I'm sorry, I can't answer that right now.</div>
-            <div class="message-info">
-                <div class="timestamp">Now</div>
-            </div>
-        `;
-        chatWindow.appendChild(assistantMessageDiv);
-        chatWindow.scrollTop = chatWindow.scrollHeight;  // Scroll to the latest message
-        loadingSpinner.style.display = "none"; // Hide spinner after response
-    }, 1000);  // Simulating a delay before the assistant replies
-});
-
-// Update script.js to show/hide the typing indicator
-const typingIndicator = document.getElementById("typing-indicator");
-
-setTimeout(() => {
-    typingIndicator.style.display = "block"; // Show typing indicator
-    setTimeout(() => {
-        typingIndicator.style.display = "none"; // Hide after response
-    }, 1000);
-}, 500);
+            recognition.onresult = function(event) {
+                const speechToText = event.results[0][0].transcript;
+                document.getElementById("user-input").value = speechToText;
+            };
+        } else {
+            showError("Speech recognition not supported in your browser");
+        }
+    });
+}
 
 // Settings Modal
 const settingsBtn = document.getElementById("settings-btn");
@@ -175,52 +133,90 @@ const darkModeToggle = document.getElementById("dark-mode-toggle");
 
 // Load saved settings
 const darkMode = localStorage.getItem("darkMode") === "true";
-darkModeToggle.checked = darkMode;
-if (darkMode) {
-    document.body.classList.add("dark-mode");
+if (darkModeToggle) {
+    darkModeToggle.checked = darkMode;
+    if (darkMode) {
+        document.body.classList.add("dark-mode");
+    }
 }
 
 // Settings button click handler
-settingsBtn.addEventListener("click", () => {
-    settingsModal.style.display = "block";
-});
+if (settingsBtn) {
+    settingsBtn.addEventListener("click", () => {
+        settingsModal.style.display = "block";
+    });
+}
 
 // Close modal when clicking the X
-closeModal.addEventListener("click", () => {
-    settingsModal.style.display = "none";
-});
+if (closeModal) {
+    closeModal.addEventListener("click", () => {
+        settingsModal.style.display = "none";
+    });
+}
 
 // Close modal when clicking outside
 window.addEventListener("click", (event) => {
-    if (event.target === settingsModal) {
+    if (settingsModal && event.target === settingsModal) {
         settingsModal.style.display = "none";
     }
 });
 
 // Dark mode toggle handler
-darkModeToggle.addEventListener("change", () => {
-    if (darkModeToggle.checked) {
-        document.body.classList.add("dark-mode");
-        localStorage.setItem("darkMode", "true");
-    } else {
-        document.body.classList.remove("dark-mode");
-        localStorage.setItem("darkMode", "false");
-    }
-});
+if (darkModeToggle) {
+    darkModeToggle.addEventListener("change", () => {
+        if (darkModeToggle.checked) {
+            document.body.classList.add("dark-mode");
+            localStorage.setItem("darkMode", "true");
+        } else {
+            document.body.classList.remove("dark-mode");
+            localStorage.setItem("darkMode", "false");
+        }
+    });
+}
 
 // Language selection handler
 const speechLanguageSelect = document.getElementById("speech-language");
-speechLanguageSelect.addEventListener("change", () => {
-    localStorage.setItem("speechLanguage", speechLanguageSelect.value);
-});
+if (speechLanguageSelect) {
+    speechLanguageSelect.addEventListener("change", () => {
+        localStorage.setItem("speechLanguage", speechLanguageSelect.value);
+    });
 
-// Load saved language preference
-const savedLanguage = localStorage.getItem("speechLanguage");
-if (savedLanguage) {
-    speechLanguageSelect.value = savedLanguage;
+    // Load saved language preference
+    const savedLanguage = localStorage.getItem("speechLanguage");
+    if (savedLanguage) {
+        speechLanguageSelect.value = savedLanguage;
+    }
 }
 
-// Add event listener for the send button
-document.getElementById("send-btn").addEventListener("click", () => {
-    sendMessage();
+// Clear conversation handler
+const clearBtn = document.getElementById("clear-btn");
+if (clearBtn) {
+    clearBtn.addEventListener("click", async () => {
+        if (confirm("Are you sure you want to clear this conversation?")) {
+            // You would typically make an API call to clear the conversation on the server
+            // For now, just clear the UI
+            const chatWindow = document.getElementById("chat-window");
+            // Keep only the welcome message
+            const welcomeMessage = document.querySelector(".welcome-message");
+            chatWindow.innerHTML = '';
+            if (welcomeMessage) {
+                chatWindow.appendChild(welcomeMessage);
+            }
+        }
+    });
+}
+
+// Initialize the page
+document.addEventListener("DOMContentLoaded", () => {
+    // Handle any initial setup
+    scrollToBottom();
+    
+    // If there's a welcome message but no chat history, show it
+    const chatWindow = document.getElementById('chat-window');
+    const messages = chatWindow.querySelectorAll('.message');
+    const welcomeMessage = chatWindow.querySelector('.welcome-message');
+    
+    if (messages.length > 0 && welcomeMessage) {
+        welcomeMessage.style.display = 'none';
+    }
 });
