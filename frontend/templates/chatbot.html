@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <button id="conversations-btn" title="Conversations">
+                    <i class="fas fa-bars"></i>
+                </button>
+                <h1>AI Assistant</h1>
+            </div>
+            <div class="header-actions">
+                <button id="new-conversation-btn" title="New conversation">
+                    <i class="fas fa-plus"></i>
+                </button>
+                <button id="settings-btn" title="Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button id="clear-btn" title="Clear conversation">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
+            </div>
+        </div>
+        
+        <!-- Settings Modal -->
+        <div id="settings-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-modal">&times;</span>
+                <h2>Settings</h2>
+                
+                <div class="settings-section">
+                    <h3>Appearance</h3>
+                    <div class="toggle-container">
+                        <label for="dark-mode-toggle">Dark Mode</label>
+                        <label class="switch">
+                            <input type="checkbox" id="dark-mode-toggle">
+                            <span class="slider round"></span>
+                        </label>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>Speech Recognition</h3>
+                    <div class="language-select-container">
+                        <label for="speech-language">Language</label>
+                        <select id="speech-language">
+                            <option value="en-US">English (US)</option>
+                            <option value="en-GB">English (UK)</option>
+                            <option value="fr-FR">French</option>
+                            <option value="es-ES">Spanish (Spain)</option>
+                            <option value="de-DE">German</option>
+                            <option value="it-IT">Italian</option>
+                            <option value="pt-BR">Portuguese (Brazil)</option>
+                            <option value="ru-RU">Russian</option>
+                            <option value="zh-CN">Chinese (Simplified)</option>
+                            <option value="ja-JP">Japanese</option>
+                            <option value="ar-SA">Arabic</option>
+                            <option value="hi-IN">Hindi</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="conversations-sidebar" class="sidebar">
+            <div class="sidebar-header">
+                <h2>Conversations</h2>
+                <button class="close-sidebar">&times;</button>
+            </div>
+            <div class="conversations-list">
+                <!-- Conversations will be populated here -->
+            </div>
+        </div>
+
+        <!-- Update the chat window section -->
+        <div id="chat-window">
+            <!-- Welcome message -->
+            <div class="welcome-message">
+                <h2>Welcome, {{ user_name }}! 👋</h2>
+                <p>How can I help you today?</p>
+            </div>
+            
+            {% for message in chat_history %}
+                <div class="message {{ 'user' if message.sender == 'user' else 'assistant' }}" data-timestamp="{{ message.timestamp }}">
+                    {% if message.sender == 'assistant' %}
+                        <div class="avatar">
+                            <img src="{{ url_for('static', filename='assistant-avatar.jpg') }}" alt="Assistant">
+                        </div>
+                    {% endif %}
+                    <div class="message-content">
+                        <div class="message-bubble">{{ message.message }}</div>
+                        <div class="message-info">
+                            <span class="timestamp">{{ message.timestamp.strftime('%H:%M') }}</span>
+                        </div>
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+
+        <div class="input-container">
+            <input type="text" id="user-input" placeholder="Type your message...">
+            <button id="send-btn">Send</button>
+        </div>
+    </div>
+    
+    <!-- Add this spinner to chatbot.html -->
+    <div id="loading-spinner" style="display: none;">
+        <i class="fas fa-spinner fa-spin"></i>
+    </div>
+
+    <!-- Add this to chatbot.html -->
+    <div id="typing-indicator" style="display: none;">
+        <div class="avatar">
+            <img src="/static/assistant-avatar.jpg" alt="Assistant Avatar">
+        </div>
+        <div class="message-bubble">Typing...</div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
