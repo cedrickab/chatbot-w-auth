@@ -135,9 +135,9 @@ def authorized():
         if user_email:
             user_chat_history = ChatHistory.query.filter_by(session_id=session["session_id"]).all()
             session["chat_history"] = [
-                {"message": msg.message, "sender": msg.sender, "timestamp": msg.timestamp}
-                for msg in user_chat_history
-            ]
+                            {"message": msg.message, "sender": msg.sender, "timestamp": msg.timestamp}
+                            for msg in user_chat_history
+                        ]
             logging.info(f"Loaded {len(session['chat_history'])} messages for user {user_email}")
         
         # Fetch rows from rh_database.db where email matches the user's email
@@ -149,7 +149,7 @@ def authorized():
                 cursor = conn.cursor()
                 cursor.execute("SELECT * FROM employees WHERE email = ?", (user_email,))
                 rows = cursor.fetchall()
-                session["rh_data"] = rows
+                column_names = [description[0] for description in cursor.description]
                 if rows:
                     logging.info(f"Fetched {len(rows)} rows from rh_database.db for user {user_email}")
                 else:
@@ -160,6 +160,7 @@ def authorized():
             finally:
                 if 'conn' in locals() and conn:
                     conn.close()
+                    
 
         return redirect(url_for("chatbot"))
     except Exception as e:
@@ -183,7 +184,7 @@ def chatbot():
         logging.info(f"New session ID generated: {session['session_id']}")
 
     # Get chat history for this session
-    chat_history = session.get("chat_history", [])
+    chat_history = get_chat_history(session["session_id"])
     user_name = session.get("user", {}).get("name", "User")
     
     # If no preferred_username is available, try name or fallback to "User"
@@ -291,6 +292,7 @@ def process_input():
             cursor = conn.cursor()
             cursor.execute("SELECT * FROM employees WHERE email = ?", (user_email,))
             rows = cursor.fetchall()
+            column_names = [description[0] for description in cursor.description]
             conn.close()
         except Exception as e:
             logging.error(f"Failed to fetch data from rh_database.db: {e}")
@@ -300,25 +302,28 @@ def process_input():
         if not rows:
             return jsonify({"error": "No relevant data found"}), 404
 
-        # Generate embeddings for the rows
-        row_texts = [str(row) for row in rows]  # Convert rows to strings
+        # Prepare rows with column names for AI processing
+        rows_with_columns = [
+            {column_names[i]: row[i] for i in range(len(column_names))}
+            for row in rows
+        ]
         
-        # Updated to use new OpenAI client syntax
+        # Convert row dictionaries to strings for embedding
+        row_strings = [str(row) for row in rows_with_columns]
+        
+        # Updated to use new OpenAI client syntax with proper input format
         embedding_response = openai_client.embeddings.create(
-            input=row_texts,
-            model=embedding_model_name  # Nom de déploiement Azure
+            input=row_strings,  # Now passing strings as expected by the API
+            model=embedding_model_name
         )
         embeddings = [item.embedding for item in embedding_response.data]
 
-        # Store embeddings in session
-        session["embeddings"] = embeddings
-
-        # Use OpenAI Chat Completion to generate a response - updated to new syntax
+        # Use OpenAI Chat Completion to generate a response
         chat_completion = openai_client.chat.completions.create(
-            model=completion_model_name,  # Nom de déploiement Azure
+            model=completion_model_name,
             messages=[
                 {"role": "system", "content": "You are an assistant that helps users with their data."},
-                {"role": "user", "content": f"User query: {user_query}\nContext: {row_texts}"}
+                {"role": "user", "content": f"User query: {user_query}\nContext: {rows_with_columns}"}
             ]
         )
 
