@@ -209,15 +209,68 @@ const clearBtn = document.getElementById("clear-btn");
 if (clearBtn) {
     clearBtn.addEventListener("click", async () => {
         if (confirm("Are you sure you want to clear this conversation?")) {
-            // You would typically make an API call to clear the conversation on the server
-            // For now, just clear the UI
-            const chatWindow = document.getElementById("chat-window");
-            // Keep only the welcome message
-            const welcomeMessage = document.querySelector(".welcome-message");
-            chatWindow.innerHTML = '';
-            if (welcomeMessage) {
-                chatWindow.appendChild(welcomeMessage);
+            try {
+                const response = await fetch('/clear_chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                if (!response.ok) throw new Error('Network response was not ok');
+
+                const data = await response.json();
+                
+                if (data.status === "success") {
+                    // Clear the UI
+                    const chatWindow = document.getElementById("chat-window");
+                    chatWindow.innerHTML = '';
+                    
+                    // Add welcome message back with the user's name
+                    const welcomeDiv = document.createElement('div');
+                    welcomeDiv.className = 'welcome-message';
+                    const userName = document.querySelector('.header-left h1')?.textContent || 'User';
+                    welcomeDiv.innerHTML = `
+                        <h2>Welcome! 👋</h2>
+                        <p>How can I help you today?</p>
+                    `;
+                    chatWindow.appendChild(welcomeDiv);
+                } else {
+                    showError(data.error || "Failed to clear conversation");
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                showError('Failed to clear conversation. Please try again.');
             }
+        }
+    });
+}
+
+// New conversation handler
+const newConversationBtn = document.getElementById("new-conversation-btn");
+if (newConversationBtn) {
+    newConversationBtn.addEventListener("click", async () => {
+        try {
+            const response = await fetch('/new_conversation', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (!response.ok) throw new Error('Network response was not ok');
+
+            const data = await response.json();
+            
+            if (data.status === "success") {
+                // Redirect to the chatbot page with the new session
+                window.location.href = data.redirect;
+            } else {
+                showError("Failed to start new conversation");
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            showError('Failed to start new conversation. Please try again.');
         }
     });
 }
@@ -235,3 +288,148 @@ document.addEventListener("DOMContentLoaded", () => {
         welcomeMessage.style.display = 'none';
     }
 });
+
+// Add these functions after the existing code
+
+// Conversation sidebar functionality
+const conversationsBtn = document.getElementById("conversations-btn");
+const conversationsSidebar = document.getElementById("conversations-sidebar");
+const closeSidebarBtn = document.getElementById("close-sidebar-btn");
+const conversationsList = document.getElementById("conversations-list");
+const sidebarNewConversationBtn = document.getElementById("sidebar-new-conversation-btn");
+
+// Toggle sidebar visibility
+if (conversationsBtn) {
+    conversationsBtn.addEventListener("click", () => {
+        conversationsSidebar.classList.add("active");
+        createSidebarOverlay();
+        loadConversations();
+    });
+}
+
+// Close sidebar
+if (closeSidebarBtn) {
+    closeSidebarBtn.addEventListener("click", () => {
+        conversationsSidebar.classList.remove("active");
+        removeSidebarOverlay();
+    });
+}
+
+// New conversation button in sidebar
+if (sidebarNewConversationBtn) {
+    sidebarNewConversationBtn.addEventListener("click", async () => {
+        // Reuse the same functionality as the header new conversation button
+        if (newConversationBtn) {
+            conversationsSidebar.classList.remove("active");
+            removeSidebarOverlay();
+            // Trigger the same click handler
+            newConversationBtn.click();
+        }
+    });
+}
+
+// Create overlay when sidebar is open
+function createSidebarOverlay() {
+    const overlay = document.createElement('div');
+    overlay.className = 'sidebar-overlay';
+    overlay.id = 'sidebar-overlay';
+    overlay.style.display = 'block';
+    
+    // Close sidebar when clicking outside
+    overlay.addEventListener('click', () => {
+        conversationsSidebar.classList.remove("active");
+        removeSidebarOverlay();
+    });
+    
+    document.body.appendChild(overlay);
+}
+
+// Remove overlay when sidebar is closed
+function removeSidebarOverlay() {
+    const overlay = document.getElementById('sidebar-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+}
+
+// Load conversations from the server
+async function loadConversations() {
+    try {
+        conversationsList.innerHTML = '<div class="loading-spinner">Loading conversations...</div>';
+        
+        const response = await fetch('/get_conversations', {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) throw new Error('Network response was not ok');
+
+        const data = await response.json();
+        
+        if (data.status === "success") {
+            displayConversations(data.conversations);
+        } else {
+            conversationsList.innerHTML = '<div class="error">Failed to load conversations</div>';
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        conversationsList.innerHTML = '<div class="error">Failed to load conversations</div>';
+    }
+}
+
+// Display conversations in the sidebar
+function displayConversations(conversations) {
+    if (conversations.length === 0) {
+        conversationsList.innerHTML = '<div class="no-conversations">No conversations yet</div>';
+        return;
+    }
+    
+    conversationsList.innerHTML = '';
+    
+    conversations.forEach(conversation => {
+        const conversationItem = document.createElement('div');
+        conversationItem.className = `conversation-item ${conversation.is_current ? 'active' : ''}`;
+        conversationItem.setAttribute('data-id', conversation.id);
+        
+        const date = new Date(conversation.timestamp);
+        const formattedDate = date.toLocaleDateString() + ' ' + 
+                              date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        
+        conversationItem.innerHTML = `
+            <div class="conversation-title">${conversation.title}</div>
+            <div class="conversation-timestamp">${formattedDate}</div>
+        `;
+        
+        conversationItem.addEventListener('click', () => switchConversation(conversation.id));
+        
+        conversationsList.appendChild(conversationItem);
+    });
+}
+
+// Switch to another conversation
+async function switchConversation(conversationId) {
+    try {
+        const response = await fetch(`/switch_conversation/${conversationId}`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) throw new Error('Network response was not ok');
+
+        const data = await response.json();
+        
+        if (data.status === "success") {
+            // Reload the page to display the switched conversation
+            window.location.href = data.redirect;
+        } else {
+            showError("Failed to switch conversation");
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showError('Failed to switch conversation. Please try again.');
+    }
+}

@@ -165,7 +165,7 @@ def authorized():
         return redirect(url_for("chatbot"))
     except Exception as e:
         logging.error(f"Error during authorization: {e}")
-        return "An error occurred during authorization", 500
+        return "An error occurred during authorization", 500 
 
 @app.route("/logout")
 def logout():
@@ -281,9 +281,17 @@ def process_input():
 
         user_query = data["query"]
         user_email = session.get("user", {}).get("preferred_username")
+        session_id = session.get("session_id")
 
         if not user_email:
             return jsonify({"error": "User email not found in session"}), 400
+
+        if not session_id:
+            session["session_id"] = str(uuid.uuid4())
+            session_id = session["session_id"]
+
+        # Save user message
+        save_message(session_id, user_query, "user")
 
         # Fetch rows from rh_database.db where email matches the user's email
         try:
@@ -318,16 +326,41 @@ def process_input():
         )
         embeddings = [item.embedding for item in embedding_response.data]
 
+        # Replace the simple "instructions" placeholder with a comprehensive system prompt
+        system_instructions = """
+        You are an HR assistant chatbot designed to help employees with their HR-related questions.
+
+        Your capabilities:
+        1. Access employee data like salary, position, department, and leave balance
+        2. Answer questions about company policies and procedures
+        3. Provide information on benefits, time off, and other HR matters
+        4. Maintain complete confidentiality of all employee information
+
+        When responding:
+        - Be professional, concise, and helpful
+        - Answer only questions related to HR matters
+        - For sensitive information, verify you're responding to the correct employee
+        - If you don't know something, say so rather than making up information
+        - Use the employee data provided in context for personalized responses
+
+        Remember that all information shared is confidential and should only be disclosed to the authenticated user it belongs to.
+        """
+
         # Use OpenAI Chat Completion to generate a response
         chat_completion = openai_client.chat.completions.create(
             model=completion_model_name,
             messages=[
-                {"role": "system", "content": "You are an assistant that helps users with their data."},
+                {"role": "system", "content": system_instructions},
                 {"role": "user", "content": f"User query: {user_query}\nContext: {rows_with_columns}"}
             ]
         )
 
         assistant_response = chat_completion.choices[0].message.content
+
+
+        
+        # Save assistant response
+        save_message(session_id, assistant_response, "assistant")
 
         return jsonify({
             "status": "success",
@@ -336,6 +369,96 @@ def process_input():
     except Exception as e:
         logging.error(f"Error in process_input: {e}")
         return jsonify({"error": f"Internal server error: {str(e)}"}), 500
+
+@app.route("/new_conversation", methods=["POST"])
+@login_required
+def new_conversation():
+    try:
+        # Generate a new session ID
+        session["session_id"] = str(uuid.uuid4())
+        logging.info(f"New conversation started. New session ID: {session['session_id']}")
+        
+        return jsonify({
+            "status": "success", 
+            "message": "New conversation started",
+            "redirect": url_for("chatbot")
+        })
+    except Exception as e:
+        logging.error(f"Error creating new conversation: {e}")
+        return jsonify({"error": "Failed to create new conversation"}), 500
+
+@app.route("/get_conversations", methods=["GET"])
+@login_required
+def get_conversations():
+    try:
+        # Get all unique session IDs with messages from this user
+        unique_sessions = db.session.query(ChatHistory.session_id).distinct().all()
+        conversations = []
+        
+        for session_id_tuple in unique_sessions:
+            session_id = session_id_tuple[0]
+            # Get first message from this session (usually user question)
+            first_message = ChatHistory.query.filter_by(
+                session_id=session_id, 
+                sender="user"
+            ).order_by(ChatHistory.timestamp).first()
+            
+            # If no user message is found, try to get any message
+            if not first_message:
+                first_message = ChatHistory.query.filter_by(
+                    session_id=session_id
+                ).order_by(ChatHistory.timestamp).first()
+            
+            # Get last message timestamp
+            last_message = ChatHistory.query.filter_by(
+                session_id=session_id
+            ).order_by(ChatHistory.timestamp.desc()).first()
+            
+            if first_message:
+                # Create a title from the first message - truncate to 50 chars
+                title = first_message.message
+                if len(title) > 50:
+                    title = title[:47] + "..."
+                
+                conversations.append({
+                    "id": session_id,
+                    "title": title,
+                    "timestamp": last_message.timestamp.isoformat() if last_message else "",
+                    "is_current": session_id == session.get("session_id", "")
+                })
+        
+        # Sort conversations by timestamp (newest first)
+        conversations.sort(key=lambda x: x["timestamp"], reverse=True)
+        
+        return jsonify({
+            "status": "success",
+            "conversations": conversations
+        })
+    except Exception as e:
+        logging.error(f"Error getting conversations: {e}")
+        return jsonify({"error": "Failed to retrieve conversations"}), 500
+
+@app.route("/switch_conversation/<session_id>", methods=["GET"])
+@login_required
+def switch_conversation(session_id):
+    try:
+        # Check if the conversation exists
+        exists = db.session.query(ChatHistory.id).filter_by(session_id=session_id).first() is not None
+        
+        if not exists:
+            return jsonify({"error": "Conversation not found"}), 404
+        
+        # Update the current session ID
+        session["session_id"] = session_id
+        logging.info(f"Switched to conversation: {session_id}")
+        
+        return jsonify({
+            "status": "success",
+            "redirect": url_for("chatbot")
+        })
+    except Exception as e:
+        logging.error(f"Error switching conversation: {e}")
+        return jsonify({"error": "Failed to switch conversation"}), 500
 
 if __name__ == "__main__":
     try:

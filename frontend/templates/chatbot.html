@@ -27,6 +27,29 @@
                 <button id="clear-btn" title="Clear conversation">
                     <i class="fas fa-trash-alt"></i>
                 </button>
+                <!-- Add Log Out button -->
+                <a href="{{ url_for('logout') }}" class="logout-button" title="Log Out">
+                    <i class="fas fa-sign-out-alt"></i>
+                </a>
+            </div>
+        </div>
+        
+        <!-- Add Conversations Sidebar -->
+        <div id="conversations-sidebar" class="conversations-sidebar">
+            <div class="conversations-header">
+                <h2>Conversations</h2>
+                <button id="close-sidebar-btn" class="close-sidebar-btn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="conversations-list" id="conversations-list">
+                <!-- Conversations will be loaded here dynamically -->
+                <div class="loading-spinner">Loading conversations...</div>
+            </div>
+            <div class="new-conversation-container">
+                <button id="sidebar-new-conversation-btn" class="new-conversation-btn">
+                    <i class="fas fa-plus"></i> New Conversation
+                </button>
             </div>
         </div>
         
